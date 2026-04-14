@@ -1,0 +1,21 @@
+{
+  "short_name": "SubMegaVeTy",
+  "name": "Subway Mega Velocity Tycoon",
+  "description": "esto no es un juego más es una experiencia que hay que vivirla y disfrutarla pruébala y te sumergirás en un mundo de diversión que te enganchará",
+  "icons": [
+    {
+      "src": "icon-192x192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "icon-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ],
+  "start_url": "/",
+  "display": "standalone",
+  "theme_color": "#3bf7af",
+  "background_color": "#ffffff"
+}

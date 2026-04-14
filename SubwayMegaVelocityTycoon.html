@@ -1,0 +1,852 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<link rel="manifest" href="/manifest.json">
+<script>
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('/service-worker.js');
+  }
+</script>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Subway Velocity: Ultimate Edition</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Luckiest+Guy&family=Poppins:wght@700;900&display=swap');
+        
+        body, html { 
+            margin: 0; padding: 0; width: 100%; height: 100%; 
+            overflow: hidden; background: #87CEEB; /* Cielo azul */
+            font-family: 'Poppins', sans-serif;
+            user-select: none; touch-action: none;
+        }
+
+        .font-game { font-family: 'Luckiest Guy', cursive; }
+        canvas { display: block; width: 100vw; height: 100vh; }
+        
+        .ui-root { position: absolute; inset: 0; pointer-events: none; display: flex; flex-direction: column; color: white; }
+        .clickable { pointer-events: auto; }
+
+        .btn-green {
+            background: linear-gradient(to bottom, #4ade80, #16a34a);
+            box-shadow: 0 6px 0 #14532d, 0 10px 20px rgba(0,0,0,0.5);
+            border: 4px solid white;
+        }
+        .btn-green:active { transform: translateY(4px); box-shadow: 0 2px 0 #14532d; }
+
+        .btn-add {
+            background: #22c55e; border: 2px solid white; color: white; border-radius: 50%; width: 24px; height: 24px; display: inline-flex; align-items: center; justify-content: center; font-weight: black; box-shadow: 0 2px 0 #16a34a; cursor: pointer;
+        }
+        .btn-add:active { transform: translateY(2px); box-shadow: none; }
+
+        .glass { background: rgba(0, 0, 0, 0.5); backdrop-filter: blur(8px); border: 2px solid rgba(255, 255, 255, 0.2); border-radius: 1.5rem; }
+        
+        .hide-scroll::-webkit-scrollbar { display: none; }
+        .hide-scroll { -ms-overflow-style: none; scrollbar-width: none; }
+        
+        .shop-tab { padding: 16px 20px; font-weight: 900; font-size: 0.8rem; border-bottom: 4px solid transparent; transition: all 0.3s; cursor: pointer; white-space: nowrap; color: #cbd5e1; }
+        .shop-tab.active { border-color: #facc15; color: #facc15; background: rgba(250, 204, 21, 0.15); }
+
+        .item-card { background: linear-gradient(135deg, rgba(255,255,255,0.1) 0%, rgba(0,0,0,0.6) 100%); }
+        .power-bar { height: 6px; border-radius: 3px; transition: width 0.1s linear; }
+
+        /* Estilos vibrantes para la tienda bancaria */
+        .bank-card { background: linear-gradient(to bottom, #1e293b, #0f172a); border: 3px solid #fbbf24; border-radius: 1rem; padding: 1rem; text-align: center; }
+        
+        .tab-btn { transition: all 0.2s; }
+        .tab-btn.active-pay { background-color: #f3f4f6; border-color: #2563eb; color: #2563eb; }
+    </style>
+</head>
+<body>
+
+<div id="ui-container" class="ui-root">
+    <!-- Notificación -->
+    <div id="notification" class="hidden absolute top-10 left-1/2 transform -translate-x-1/2 bg-green-500 text-white font-bold px-6 py-3 rounded-full shadow-2xl z-[100] transition-opacity duration-300 pointer-events-none">
+        Mensaje
+    </div>
+
+    <!-- Pantalla de Carga -->
+    <div id="loading" class="absolute inset-0 z-[100] bg-sky-400 flex flex-col items-center justify-center pointer-auto">
+        <h1 class="text-6xl font-game text-white mb-8 animate-bounce text-center drop-shadow-xl">SUBWAY<br>VELOCITY</h1>
+        <div class="w-64 h-4 bg-black/20 rounded-full border-2 border-white overflow-hidden shadow-lg">
+            <div id="load-bar" class="h-full bg-yellow-400 w-0 transition-all duration-300"></div>
+        </div>
+        <p class="mt-6 text-white font-black text-[12px] uppercase tracking-[0.2em] drop-shadow-md">Cargando la ciudad...</p>
+    </div>
+
+    <!-- Menú Principal -->
+    <div id="menu" class="flex-1 flex flex-col items-center justify-between py-12 clickable">
+        <div class="mt-8 text-center">
+            <h1 class="text-7xl font-game text-white drop-shadow-[0_6px_0_#d97706] leading-none text-yellow-400">SUBWAY<br><span class="text-white">RUNNER</span></h1>
+            <div class="mt-6 glass px-8 py-3 inline-block shadow-lg">
+                <span id="best-score" class="text-white font-black text-sm tracking-widest uppercase">Récord: 0</span>
+            </div>
+        </div>
+
+        <button onclick="Game.start()" class="btn-green w-36 h-36 rounded-full flex items-center justify-center hover:scale-105 transition-transform">
+            <svg viewBox="0 0 24 24" class="w-20 h-20 fill-white"><path d="M8 5v14l11-7z"/></svg>
+        </button>
+
+        <div class="w-full px-6 flex flex-col items-center gap-4">
+            <div class="flex gap-4 w-full max-w-sm">
+                <!-- Monedas -->
+                <div class="flex-1 glass px-4 py-3 flex items-center justify-between border-yellow-400/50 shadow-xl bg-slate-900/80 rounded-full">
+                    <div class="flex items-center gap-2">
+                        <span class="text-2xl drop-shadow-md">🪙</span>
+                        <span id="total-coins" class="text-xl font-game text-yellow-400">0</span>
+                    </div>
+                    <div onclick="UI.openBank()" class="btn-add">+</div>
+                </div>
+                <!-- Billetes Verdes -->
+                <div class="flex-1 glass px-4 py-3 flex items-center justify-between border-green-400/50 shadow-xl bg-slate-900/80 rounded-full">
+                    <div class="flex items-center gap-2">
+                        <span class="text-2xl drop-shadow-md">💵</span>
+                        <span id="total-cash" class="text-xl font-game text-green-400">0</span>
+                    </div>
+                    <div onclick="UI.openBank()" class="btn-add">+</div>
+                </div>
+            </div>
+
+            <button onclick="UI.openShop('chars')" class="w-full max-w-sm glass p-5 flex items-center justify-center gap-3 active:scale-95 transition-transform bg-blue-600/80 border-blue-400/50 rounded-full shadow-xl">
+                <span class="text-2xl drop-shadow-md">🛍️</span>
+                <span class="font-black uppercase tracking-widest text-sm text-white">Vestidor & Tablas</span>
+            </button>
+        </div>
+    </div>
+
+    <!-- HUD Juego -->
+    <div id="hud" class="hidden absolute top-0 left-0 w-full p-6 flex justify-between">
+        <div class="space-y-3">
+            <div class="glass px-6 py-2 flex flex-col border-l-4 border-white shadow-lg bg-black/40">
+                <span class="text-[10px] font-black text-white/80 uppercase tracking-widest">Puntaje</span>
+                <span id="score-val" class="text-3xl font-game text-white">0</span>
+            </div>
+            <div class="glass px-6 py-2 flex flex-col border-l-4 border-yellow-400 shadow-lg bg-black/40">
+                <span class="text-[10px] font-black text-yellow-400 uppercase tracking-widest">Monedas</span>
+                <span id="coin-val" class="text-3xl font-game text-white">0</span>
+            </div>
+        </div>
+        <div id="active-powers" class="flex flex-col gap-3 items-end"></div>
+    </div>
+
+    <!-- Tienda (Mall) -->
+    <div id="shop" class="hidden absolute inset-0 bg-sky-900 clickable flex flex-col z-[50]">
+        <div class="p-6 flex justify-between items-center bg-sky-950 border-b-4 border-black/20 shadow-2xl z-10">
+            <button onclick="UI.closeShop()" class="p-3 glass rounded-full active:scale-90 bg-white/10 border-white/20"><svg viewBox="0 0 24 24" class="w-6 h-6 fill-white"><path d="M15.41 16.59L10.83 12l4.58-4.59L14 6l-6 6 6 6 1.41-1.41z"/></svg></button>
+            <h2 class="text-3xl font-game text-white uppercase drop-shadow-md">TIENDA</h2>
+            <div class="flex flex-col items-end gap-1">
+                <div class="bg-black/40 px-3 py-1 rounded-full text-yellow-400 font-bold border border-yellow-400/30 text-xs">🪙 <span id="shop-coins">0</span></div>
+                <div class="bg-black/40 px-3 py-1 rounded-full text-green-400 font-bold border border-green-400/30 text-xs">💵 <span id="shop-cash">0</span></div>
+            </div>
+        </div>
+        <div class="flex bg-sky-800 overflow-x-auto hide-scroll border-b border-black/20 shadow-inner">
+            <div onclick="UI.setTab('chars')" id="tab-chars" class="shop-tab active">PERSONAJES</div>
+            <div onclick="UI.setTab('boards')" id="tab-boards" class="shop-tab">TABLAS</div>
+            <div onclick="UI.setTab('shirts')" id="tab-shirts" class="shop-tab">CAMISAS</div>
+            <div onclick="UI.setTab('pants')" id="tab-pants" class="shop-tab">PANTALONES</div>
+            <div onclick="UI.setTab('boots')" id="tab-boots" class="shop-tab">BOTAS</div>
+            <div onclick="UI.setTab('caps')" id="tab-caps" class="shop-tab">GORRAS</div>
+            <div onclick="UI.setTab('glasses')" id="tab-glasses" class="shop-tab">GAFAS</div>
+            <div onclick="UI.setTab('necks')" id="tab-necks" class="shop-tab">COLLARES</div>
+        </div>
+        <div id="shop-grid" class="flex-1 overflow-y-auto p-4 grid grid-cols-2 gap-4 pb-12 content-start"></div>
+    </div>
+
+    <!-- Banco (Comprar Monedas/Cash con dinero real simulado) -->
+    <div id="bank" class="hidden absolute inset-0 bg-black/80 clickable flex flex-col items-center justify-center p-4 backdrop-blur-xl z-[60]">
+        <div class="bg-slate-800 w-full max-w-md rounded-3xl border-4 border-yellow-400 p-6 flex flex-col shadow-[0_0_50px_rgba(250,204,21,0.3)] max-h-full overflow-y-auto">
+            <div class="flex justify-between items-center mb-6">
+                <h2 class="text-4xl font-game text-white">EL BANCO</h2>
+                <button onclick="UI.closeBank()" class="bg-red-500 rounded-full p-2 text-white font-black border-2 border-white w-10 h-10 flex items-center justify-center active:scale-90">X</button>
+            </div>
+            
+            <div class="grid grid-cols-2 gap-4 mb-4">
+                <div class="bank-card">
+                    <div class="text-4xl mb-1 drop-shadow-md">🪙</div>
+                    <div class="font-black text-yellow-400 text-md mb-2">+10,000</div>
+                    <button onclick="UI.openPayment('coins', 10000, 0.99)" class="w-full bg-yellow-500 text-black font-game py-1.5 rounded-xl border-b-4 border-yellow-700 active:translate-y-1 active:border-b-0">€0.99</button>
+                </div>
+                <div class="bank-card">
+                    <div class="text-4xl mb-1 drop-shadow-md">💰</div>
+                    <div class="font-black text-yellow-400 text-md mb-2">+50,000</div>
+                    <button onclick="UI.openPayment('coins', 50000, 3.99)" class="w-full bg-yellow-500 text-black font-game py-1.5 rounded-xl border-b-4 border-yellow-700 active:translate-y-1 active:border-b-0">€3.99</button>
+                </div>
+                <div class="bank-card border-green-400">
+                    <div class="text-4xl mb-1 drop-shadow-md">💵</div>
+                    <div class="font-black text-green-400 text-md mb-2">+500</div>
+                    <button onclick="UI.openPayment('cash', 500, 1.99)" class="w-full bg-green-500 text-white font-game py-1.5 rounded-xl border-b-4 border-green-700 active:translate-y-1 active:border-b-0">€1.99</button>
+                </div>
+                <div class="bank-card border-green-400">
+                    <div class="text-4xl mb-1 drop-shadow-md">💸</div>
+                    <div class="font-black text-green-400 text-md mb-2">+2,500</div>
+                    <button onclick="UI.openPayment('cash', 2500, 7.99)" class="w-full bg-green-500 text-white font-game py-1.5 rounded-xl border-b-4 border-green-700 active:translate-y-1 active:border-b-0">€7.99</button>
+                </div>
+            </div>
+            <p class="text-center text-white/50 text-xs font-bold uppercase">Pasarela de pago simulada y segura.</p>
+        </div>
+    </div>
+
+    <!-- Modal de Pago (Fake Payment Gateway) -->
+    <div id="payment-modal" class="hidden absolute inset-0 bg-black/90 clickable z-[70] flex items-center justify-center p-6 backdrop-blur-md">
+        <div class="bg-white rounded-2xl w-full max-w-sm p-6 text-black flex flex-col gap-4 shadow-2xl relative">
+            <button onclick="UI.closePayment()" class="absolute top-4 right-4 text-gray-500 font-bold text-xl active:scale-90">X</button>
+            <h2 class="text-2xl font-black text-center border-b pb-2 text-slate-800">Pago Seguro</h2>
+            
+            <div class="flex justify-around mb-2">
+                <button id="pay-method-card" onclick="UI.selectPayMethod('card')" class="tab-btn active-pay p-2 border-2 rounded-lg flex-1 mx-1 text-center font-bold text-sm">💳 Tarjeta</button>
+                <button id="pay-method-paypal" onclick="UI.selectPayMethod('paypal')" class="tab-btn p-2 border-2 rounded-lg flex-1 mx-1 text-center font-bold text-sm text-gray-500 hover:text-blue-600">🅿️ PayPal</button>
+            </div>
+            
+            <div id="card-form" class="flex flex-col gap-3">
+                <input type="text" placeholder="Número de Tarjeta" class="border-2 border-gray-300 p-3 rounded-lg text-sm w-full outline-none focus:border-blue-500" maxlength="19">
+                <div class="flex gap-3">
+                    <input type="text" placeholder="MM/AA" class="border-2 border-gray-300 p-3 rounded-lg text-sm w-1/2 outline-none focus:border-blue-500" maxlength="5">
+                    <input type="password" placeholder="CVC" class="border-2 border-gray-300 p-3 rounded-lg text-sm w-1/2 outline-none focus:border-blue-500" maxlength="3">
+                </div>
+                <input type="text" placeholder="Nombre del Titular" class="border-2 border-gray-300 p-3 rounded-lg text-sm w-full outline-none focus:border-blue-500">
+            </div>
+
+            <div id="paypal-form" class="hidden flex flex-col items-center justify-center py-4 text-center">
+                <p class="text-sm text-gray-600 mb-2">Serás redirigido a PayPal de forma segura.</p>
+                <span class="text-4xl">🅿️</span>
+            </div>
+            
+            <button id="pay-btn" onclick="UI.processPayment()" class="mt-2 bg-blue-600 text-white font-bold py-4 rounded-xl text-lg hover:bg-blue-700 active:scale-95 transition-all shadow-[0_4px_14px_0_rgba(37,99,235,0.39)]">
+                Pagar <span id="pay-amount"></span>
+            </button>
+        </div>
+    </div>
+
+    <!-- Game Over -->
+    <div id="over" class="hidden absolute inset-0 bg-black/90 clickable flex flex-col items-center justify-center p-8 backdrop-blur-md">
+        <h2 class="text-7xl font-game text-white mb-2 drop-shadow-[0_4px_0_#b91c1c] text-center">¡BUM!</h2>
+        <p class="text-yellow-400 font-black uppercase tracking-widest mb-8">El Inspector te atrapó</p>
+        <div class="glass p-10 w-full max-w-sm space-y-6 mb-10 border-white/20 shadow-2xl">
+            <div class="flex justify-between items-center border-b border-white/10 pb-4">
+                <span class="text-white font-black uppercase text-xs tracking-widest">Puntaje</span>
+                <span id="final-score" class="text-4xl font-game text-white">0</span>
+            </div>
+            <div class="flex justify-between items-center">
+                <span class="text-yellow-400 font-black uppercase text-xs tracking-widest">Botín</span>
+                <span id="final-coins" class="text-4xl font-game text-yellow-400">+0</span>
+            </div>
+        </div>
+        <div class="flex gap-6">
+            <button onclick="Game.start()" class="btn-green p-8 rounded-full shadow-2xl active:scale-90 border-4 border-white"><svg viewBox="0 0 24 24" class="w-12 h-12 fill-white"><path d="M17.65 6.35A7.958 7.958 0 0012 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08A5.99 5.99 0 0112 18c-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/></svg></button>
+            <button onclick="document.getElementById('over').classList.add('hidden'); document.getElementById('menu').classList.remove('hidden');" class="p-8 bg-slate-700 rounded-full border-4 border-white active:scale-90 shadow-2xl"><svg viewBox="0 0 24 24" class="w-12 h-12 fill-white"><path d="M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z"/></svg></button>
+        </div>
+    </div>
+</div>
+
+<script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.2/firebase-app.js";
+    import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.0.2/firebase-auth.js";
+    import { getFirestore, doc, onSnapshot, updateDoc, setDoc } from "https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js";
+
+    // --- FIREBASE SETUP ---
+    let db, auth, appId;
+    try {
+        const config = JSON.parse(__firebase_config);
+        const app = initializeApp(config);
+        auth = getAuth(app); db = getFirestore(app);
+        appId = typeof __app_id !== 'undefined' ? __app_id : 'subway-velocity-daytime';
+    } catch(e) { console.warn("Modo offline activado"); }
+
+    // --- TEXTURAS GENERADAS POR CÓDIGO ---
+    const generateTexture = (type, color1, color2, text) => {
+        const canvas = document.createElement('canvas'); canvas.width = 256; canvas.height = 256; const ctx = canvas.getContext('2d');
+        ctx.fillStyle = color1; ctx.fillRect(0,0,256,256);
+        
+        if(type === 'graffiti') {
+            for(let i=0; i<30; i++) {
+                ctx.fillStyle = Math.random() > 0.5 ? color2 : `hsl(${Math.random()*360}, 100%, 50%)`;
+                ctx.beginPath(); Math.random()>0.5 ? ctx.arc(Math.random()*256, Math.random()*256, Math.random()*30+10, 0, Math.PI*2) : ctx.fillRect(Math.random()*256, Math.random()*256, Math.random()*50+10, Math.random()*50+10); ctx.fill();
+            }
+            ctx.fillStyle = '#ffffff'; ctx.font = '900 60px "Luckiest Guy", Impact'; ctx.textAlign = 'center'; ctx.shadowColor = '#000'; ctx.shadowBlur = 10;
+            ctx.fillText(text, 128, 150); ctx.lineWidth = 4; ctx.strokeStyle = color2; ctx.strokeText(text, 128, 150);
+        } else if (type === 'wood') {
+            ctx.fillStyle = color2;
+            for(let i=0; i<100; i++) {
+                ctx.beginPath(); ctx.moveTo(0, Math.random()*256); ctx.bezierCurveTo(80, Math.random()*256, 170, Math.random()*256, 256, Math.random()*256); ctx.lineWidth = Math.random()*4+1; ctx.stroke();
+            }
+        } else if (type === 'train') {
+            ctx.fillStyle = color2; ctx.fillRect(0, 200, 256, 56);
+            ctx.fillStyle = '#111';
+            for(let i=0; i<4; i++) { ctx.fillRect(20 + i*60, 60, 40, 60); }
+        }
+        const tex = new THREE.CanvasTexture(canvas); tex.needsUpdate = true; return tex;
+    };
+
+    const HSL = (h, s, l) => {
+        let r, g, b;
+        if (s === 0) r = g = b = l; else {
+            const hue2rgb = (p, q, t) => { if(t < 0) t += 1; if(t > 1) t -= 1; if(t < 1/6) return p + (q - p) * 6 * t; if(t < 1/2) return q; if(t < 2/3) return p + (q - p) * (2/3 - t) * 6; return p; };
+            const q = l < 0.5 ? l * (1 + s) : l + s - l * s; const p = 2 * l - q;
+            r = hue2rgb(p, q, h + 1/3); g = hue2rgb(p, q, h); b = hue2rgb(p, q, h - 1/3);
+        }
+        return (Math.round(r*255)<<16) | (Math.round(g*255)<<8) | Math.round(b*255);
+    };
+
+    // --- BASE DE DATOS DE ÍTEMS ---
+    const ITEMS = { chars: [], boards: [], shirts: [], pants: [], boots: [], caps: [], glasses: [], necks: [] };
+    
+    // Skins
+    for(let i=1; i<=45; i++) {
+        let type, name, color, hairColor = HSL(Math.random(), Math.random(), Math.random()*0.8+0.2), img;
+        if(i <= 10) { type = 'boy'; name = `Chico Urbano ${i}`; color = HSL(0.08, 0.4, Math.random()*0.6+0.2); img = '👦🏽'; }
+        else if(i <= 20) { type = 'girl'; name = `Chica Roller ${i-10}`; color = HSL(0.08, 0.4, Math.random()*0.6+0.2); img = '👧🏼'; }
+        else if(i <= 30) { type = 'trans'; name = `Cool Trans ${i-20}`; color = HSL(0.08, 0.4, 0.8); hairColor = i%2===0?0xffb6c1:0xadd8e6; img = '👩🏻‍🎤'; } 
+        else { type = 'animal'; const anis = ['Gato','Perro','Oso','Rana','Panda','Zorro','Lobo','Tigre','León','Conejo']; const ani = anis[i%anis.length]; name = `${ani} Divertido`; color = HSL(Math.random(), 0.8, 0.5); img = ['🐼','🐱','🐶','🦊','🐸','🐻','🐯','🦁','🐰','🐵'][i%10] || '🦄'; }
+        ITEMS.chars.push({ id: `c${i}`, name, type, color, hairColor, price: i*50, currency: i>25?'cash':'coins', img, style: i%3 });
+    }
+
+    // Boards
+    const BOARD_MATS = ['Oro', 'Plata', 'Bronce', 'Diamante', 'Platino', 'Rubí', 'Caoba', 'Pino', 'Haya', 'Roble'];
+    for(let i=1; i<=64; i++) {
+        const mat = BOARD_MATS[i % BOARD_MATS.length];
+        let metal = 0, rough = 1, trans = 0, color = HSL(Math.random(), 0.8, 0.5), shape = i%3;
+        if(['Oro','Plata','Bronce','Platino'].includes(mat)) { metal = 1; rough = 0.2; color = mat==='Oro'?0xffd700:mat==='Plata'?0xe5e4e2:mat==='Platino'?0xe5e4e2:0xcd7f32; }
+        if(['Diamante','Rubí'].includes(mat)) { trans = 1; rough = 0.1; color = mat==='Rubí'?0xff0044:0x00ffff; }
+        if(['Caoba','Pino','Haya','Roble'].includes(mat)) { color = 0x8b4513; rough = 0.9; }
+        ITEMS.boards.push({ id: `b${i}`, name: `Tabla ${mat} ${i}`, matType: mat, color, metal, rough, trans, shape, text: 'RUSH', accent: HSL(Math.random(),1,0.5), price: i*100, currency: trans||metal?'cash':'coins', img: trans?'💎':metal?'🏆':'🛹' });
+    }
+
+    const genItems = (arr, pfx, icon, max, hasNone, stylesArr) => {
+        if(hasNone) arr.push({ id: `${pfx}none`, name: 'Ninguno', color: 0, style: 0, price: 0, currency: 'coins', img: '❌', text: '' });
+        for(let i=1; i<=max; i++) {
+            arr.push({
+                id: `${pfx}${i}`, name: `${stylesArr[i%stylesArr.length]} ${i}`,
+                color: HSL(Math.random(), Math.random()*0.5+0.5, Math.random()*0.5+0.2),
+                accent: HSL(Math.random(), 1, 0.5), style: i%stylesArr.length, text: 'WILD',
+                brand: 'X', price: i * 50, currency: i>40?'cash':'coins', img: icon
+            });
+        }
+    };
+    genItems(ITEMS.shirts, 'sh', '👕', 60, false, ['Camiseta', 'Sudadera', 'Chaqueta', 'Tirantes']);
+    genItems(ITEMS.pants, 'p', '👖', 60, false, ['Vaqueros', 'Cortos', 'Cargo', 'Chándal']);
+    genItems(ITEMS.boots, 'bt', '👟', 60, false, ['Zapatillas', 'Botas', 'Plataformas', 'Tenis']);
+    genItems(ITEMS.caps, 'g', '🧢', 60, true, ['Frontal', 'Atrás', 'Beanie', 'Sombrero']);
+    genItems(ITEMS.glasses, 'gl', '🕶️', 60, true, ['Gafas Sol', 'Redondas', 'Visor', 'Cuadradas']);
+    
+    // Collares
+    ITEMS.necks.push({ id: `nnone`, name: 'Ninguno', color: 0, style: 0, price: 0, currency: 'coins', img: '❌' });
+    const NECK_MATS = ['Diamantes', 'Cadena de Oro', 'Plata', 'Rubí', 'Esmeralda', 'Zafiro', 'Lapislázuli', 'Platino', 'Cobalto', 'Malakita', 'Amatista', 'Geoda'];
+    for(let i=1; i<=60; i++) {
+        const mat = NECK_MATS[i % NECK_MATS.length];
+        let trans = ['Diamantes','Rubí','Esmeralda','Zafiro','Amatista'].includes(mat);
+        let metal = ['Cadena de Oro','Plata','Platino','Cobalto'].includes(mat);
+        let color = mat==='Cadena de Oro'?0xffd700:mat==='Plata'?0xcccccc:mat==='Rubí'?0xff0044:mat==='Esmeralda'?0x00ff44:mat==='Zafiro'?0x0044ff:HSL(Math.random(),1,0.5);
+        ITEMS.necks.push({ id: `n${i}`, name: mat, color, style: i%3, trans, metal, price: i*100, currency: trans||metal?'cash':'coins', img: metal?'⛓️':'💎' });
+    }
+
+    let userData = {
+        coins: 500, cash: 50, highScore: 0,
+        currentChars: 'c1', currentBoards: 'b1', currentShirts: 'sh1', currentPants: 'p1', currentBoots: 'bt1', currentCaps: 'gnone', currentGlasses: 'glnone', currentNecks: 'nnone',
+        unlockedChars: ['c1'], unlockedBoards: ['b1'], unlockedShirts: ['sh1'], unlockedPants: ['p1'], unlockedBoots: ['bt1'], unlockedCaps: ['gnone'], unlockedGlasses: ['glnone'], unlockedNecks: ['nnone']
+    };
+
+    const POWERS = {
+        jet: { name: 'JETPACK VIP', color: '#ff4400', dur: 12, icon: '🚀' },
+        mag: { name: 'SÚPER IMÁN', color: '#00ccff', dur: 15, icon: '🧲' },
+        mul: { name: 'PUNTOS X2', color: '#facc15', dur: 20, icon: '✖️' },
+        shd: { name: 'ESCUDO', color: '#4ade80', dur: 1, icon: '🛡️' },
+        jmp: { name: 'SALTO PRO', color: '#f472b6', dur: 15, icon: '👟' }
+    };
+
+    // --- MOTOR 3D ---
+    window.Game = {
+        active: false, speed: 0.8, score: 0, coins: 0, lane: 1, lanesX: [-4.5, 0, 4.5],
+        obstacles: [], pickables: [], buildings: [], activePowers: {},
+        isJumping: false, vVel: 0, isSliding: false, textures: {},
+
+        init() {
+            document.getElementById('load-bar').style.width = '20%';
+            
+            this.scene = new THREE.Scene();
+            this.scene.background = new THREE.Color(0x87CEEB); 
+            this.scene.fog = new THREE.Fog(0x87CEEB, 40, 220);
+
+            this.camera = new THREE.PerspectiveCamera(70, window.innerWidth/window.innerHeight, 0.1, 1000);
+            this.camera.position.set(0, 10, 16);
+
+            this.renderer = new THREE.WebGLRenderer({ antialias: true });
+            this.renderer.setSize(window.innerWidth, window.innerHeight);
+            this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+            this.renderer.shadowMap.enabled = true;
+            document.body.prepend(this.renderer.domElement);
+
+            this.scene.add(new THREE.AmbientLight(0xffffff, 0.7));
+            const sun = new THREE.DirectionalLight(0xffffff, 1.2);
+            sun.position.set(50, 100, 30); sun.castShadow = true;
+            sun.shadow.camera.left = -30; sun.shadow.camera.right = 30;
+            sun.shadow.camera.top = 50; sun.shadow.camera.bottom = -50;
+            this.scene.add(sun);
+
+            this.createEnvironment();
+            this.setupTouch();
+            
+            document.getElementById('load-bar').style.width = '100%';
+            setTimeout(() => document.getElementById('loading').classList.add('hidden'), 500);
+            this.animate();
+        },
+
+        createEnvironment() {
+            this.envPieces = []; // Guardar referencias para moverlas
+            
+            const ground = new THREE.Mesh(new THREE.PlaneGeometry(1000, 1000), new THREE.MeshStandardMaterial({ color: 0x55aa55, roughness: 1 }));
+            ground.rotation.x = -Math.PI / 2; ground.position.y = -0.1; ground.receiveShadow = true;
+            this.scene.add(ground);
+            this.envPieces.push(ground);
+
+            const gravel = new THREE.Mesh(new THREE.PlaneGeometry(16, 1000), new THREE.MeshStandardMaterial({ color: 0x888888, roughness: 0.9 }));
+            gravel.rotation.x = -Math.PI / 2; gravel.position.y = 0; gravel.receiveShadow = true;
+            this.scene.add(gravel);
+            this.envPieces.push(gravel);
+
+            const railMat = new THREE.MeshStandardMaterial({ color: 0xaaaaaa, metalness: 0.8, roughness: 0.2 });
+            [-5.5, -3.5, -1, 1, 3.5, 5.5].forEach(x => {
+                const rail = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.2, 1000), railMat);
+                rail.position.set(x, 0.1, 0); rail.castShadow = true; rail.receiveShadow = true;
+                this.scene.add(rail);
+                this.envPieces.push(rail);
+            });
+        },
+
+        getTex(id, type, c1, c2, text) {
+            const hex1 = '#' + c1.toString(16).padStart(6,'0'); const hex2 = '#' + c2.toString(16).padStart(6,'0');
+            if(!this.textures[id]) this.textures[id] = generateTexture(type, hex1, hex2, text); return this.textures[id];
+        },
+
+        createPlayerModel() {
+            if(this.player) this.scene.remove(this.player);
+            
+            const get = (type) => ITEMS[type].find(x => x.id === userData[`current${type.charAt(0).toUpperCase() + type.slice(1)}`]);
+            const skin = get('chars'), shirt = get('shirts'), pants = get('pants'), boots = get('boots'), cap = get('caps'), glass = get('glasses'), neck = get('necks'), board = get('boards');
+
+            this.player = new THREE.Group();
+            
+            const createLeg = (isLeft) => {
+                const legG = new THREE.Group();
+                const pMat = new THREE.MeshStandardMaterial({ color: pants.color });
+                const thigh = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.8, 0.5), pMat); thigh.position.y = -0.4; thigh.castShadow = true; legG.add(thigh);
+                const calf = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.7, 0.4), pants.style===1 ? new THREE.MeshStandardMaterial({color: skin.color}) : pMat); calf.position.y = -1.15; calf.castShadow = true; legG.add(calf);
+                
+                const bMat = new THREE.MeshStandardMaterial({ color: boots.color });
+                const bootM = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.4, 0.7), bMat); bootM.position.set(0, -1.65, isLeft ? -0.1 : -0.1); bootM.castShadow = true; legG.add(bootM);
+                
+                legG.position.set(isLeft ? -0.4 : 0.4, 1.8, 0); return legG;
+            };
+            this.legL = createLeg(true); this.player.add(this.legL); this.legR = createLeg(false); this.player.add(this.legR);
+
+            const tMat = new THREE.MeshStandardMaterial({ color: shirt.color, map: this.getTex(shirt.id, 'graffiti', shirt.color, shirt.accent, 'RUN') });
+            const torso = new THREE.Mesh(new THREE.BoxGeometry(1.4, 1.4, 0.7), tMat); torso.position.y = 2.5; torso.castShadow = true; this.player.add(torso);
+
+            const createArm = (isLeft) => {
+                const armG = new THREE.Group();
+                const armM = new THREE.Mesh(new THREE.BoxGeometry(0.38, 1.2, 0.38), new THREE.MeshStandardMaterial({ color: skin.color }));
+                armM.position.y = -0.6; armM.castShadow = true; armG.add(armM);
+                armG.position.set(isLeft ? -1 : 1, 3.0, 0); return armG;
+            };
+            this.armL = createArm(true); this.player.add(this.armL); this.armR = createArm(false); this.player.add(this.armR);
+
+            const headG = new THREE.Group(); headG.position.y = 3.6; this.player.add(headG);
+            const headM = new THREE.Mesh(new THREE.BoxGeometry(1.1, 1.1, 1.1), new THREE.MeshStandardMaterial({ color: skin.color })); headM.castShadow = true; headG.add(headM);
+
+            const eyeMat = new THREE.MeshBasicMaterial({ color: 0x000000 });
+            const eyeL = new THREE.Mesh(new THREE.BoxGeometry(0.15, 0.15, 0.1), eyeMat); eyeL.position.set(-0.25, 0.1, -0.56); headG.add(eyeL);
+            const eyeR = new THREE.Mesh(new THREE.BoxGeometry(0.15, 0.15, 0.1), eyeMat); eyeR.position.set(0.25, 0.1, -0.56); headG.add(eyeR);
+            const mouth = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.05, 0.1), new THREE.MeshBasicMaterial({color: 0x4a0404})); mouth.position.set(0, -0.3, -0.56); headG.add(mouth);
+
+            if(skin.type === 'animal') {
+                const eL = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.4, 0.2), new THREE.MeshStandardMaterial({color: skin.color})); eL.position.set(-0.45, 0.6, 0); headG.add(eL);
+                const eR = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.4, 0.2), new THREE.MeshStandardMaterial({color: skin.color})); eR.position.set(0.45, 0.6, 0); headG.add(eR);
+                const snout = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.3, 0.3), new THREE.MeshStandardMaterial({color: 0xffffff})); snout.position.set(0, -0.15, -0.65); headG.add(snout);
+                const nose = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.1, 0.1), eyeMat); nose.position.set(0, 0.1, -0.16); snout.add(nose);
+            } else {
+                const eL = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.3, 0.2), new THREE.MeshStandardMaterial({color: skin.color})); eL.position.set(-0.6, 0, 0); headG.add(eL);
+                const eR = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.3, 0.2), new THREE.MeshStandardMaterial({color: skin.color})); eR.position.set(0.6, 0, 0); headG.add(eR);
+                const hairMat = new THREE.MeshStandardMaterial({color: skin.hairColor});
+                const hair = new THREE.Mesh(new THREE.BoxGeometry(1.2, 0.4, 1.2), hairMat); hair.position.y = 0.6; headG.add(hair);
+            }
+
+            if(cap.id !== 'gnone') {
+                const cMat = new THREE.MeshStandardMaterial({ color: cap.color });
+                const cBase = new THREE.Mesh(new THREE.CylinderGeometry(0.56, 0.56, 0.4, 16), cMat); cBase.position.y = 0.56; headG.add(cBase);
+                const cVisor = new THREE.Mesh(new THREE.BoxGeometry(0.8, 0.05, 0.6), cMat); cVisor.position.set(0, 0.4, -0.6); headG.add(cVisor);
+            }
+
+            const bMatMain = new THREE.MeshStandardMaterial({ color: board.color, metalness: board.metal?1:0, roughness: board.rough });
+            this.boardMesh = new THREE.Mesh(new THREE.BoxGeometry(1.6, 0.2, 4), bMatMain);
+            this.boardMesh.position.y = 0.1; this.boardMesh.visible = false; this.player.add(this.boardMesh);
+
+            this.scene.add(this.player);
+        },
+
+        createPowerUpModel(type) {
+            const group = new THREE.Group();
+            if(type === 'mag') {
+                const mMat = new THREE.MeshStandardMaterial({color: 0xff0000}); const sMat = new THREE.MeshStandardMaterial({color: 0xcccccc, metalness: 1});
+                const u = new THREE.Mesh(new THREE.TorusGeometry(0.5, 0.2, 8, 16, Math.PI), mMat); u.rotation.z = Math.PI; group.add(u);
+                const t1 = new THREE.Mesh(new THREE.BoxGeometry(0.4,0.3,0.4), sMat); t1.position.set(0.5, 0.15, 0); group.add(t1);
+                const t2 = new THREE.Mesh(new THREE.BoxGeometry(0.4,0.3,0.4), sMat); t2.position.set(-0.5, 0.15, 0); group.add(t2);
+            } else if(type === 'jet') {
+                const jMat = new THREE.MeshStandardMaterial({color: 0x444444}); const fMat = new THREE.MeshBasicMaterial({color: 0xff8800});
+                const r1 = new THREE.Mesh(new THREE.CylinderGeometry(0.2,0.2,1,8), jMat); r1.position.set(-0.3,0,0); group.add(r1);
+                const r2 = new THREE.Mesh(new THREE.CylinderGeometry(0.2,0.2,1,8), jMat); r2.position.set(0.3,0,0); group.add(r2);
+                const f1 = new THREE.Mesh(new THREE.ConeGeometry(0.15,0.4,8), fMat); f1.position.set(-0.3,-0.7,0); f1.rotation.x=Math.PI; group.add(f1);
+                const f2 = new THREE.Mesh(new THREE.ConeGeometry(0.15,0.4,8), fMat); f2.position.set(0.3,-0.7,0); f2.rotation.x=Math.PI; group.add(f2);
+            } else if(type === 'jmp') {
+                const bMat = new THREE.MeshStandardMaterial({color: 0x00ffcc});
+                const b1 = new THREE.Mesh(new THREE.BoxGeometry(0.4,0.6,0.6), bMat); b1.position.set(-0.3,0,0); group.add(b1);
+                const b2 = new THREE.Mesh(new THREE.BoxGeometry(0.4,0.6,0.6), bMat); b2.position.set(0.3,0,0); group.add(b2);
+            } else if(type === 'mul') {
+                const starMat = new THREE.MeshStandardMaterial({color: 0xffd700, emissive: 0xaa8800});
+                const star1 = new THREE.Mesh(new THREE.BoxGeometry(1,1,0.2), starMat); star1.rotation.z = Math.PI/4; group.add(star1);
+                const star2 = new THREE.Mesh(new THREE.BoxGeometry(1,1,0.2), starMat); group.add(star2);
+            }
+            group.scale.set(1.5, 1.5, 1.5);
+            return group;
+        },
+
+        setupTouch() {
+            let sx, sy;
+            window.addEventListener('touchstart', e => { sx = e.touches[0].clientX; sy = e.touches[0].clientY; });
+            window.addEventListener('touchend', e => {
+                if(!this.active) return;
+                const dx = e.changedTouches[0].clientX - sx, dy = e.changedTouches[0].clientY - sy;
+                if(Math.abs(dx) > Math.abs(dy)) {
+                    if(dx > 30) this.lane = Math.min(2, this.lane + 1); else if(dx < -30) this.lane = Math.max(0, this.lane - 1);
+                } else {
+                    if(dy < -30 && !this.isJumping && !this.activePowers.jet) { this.isJumping = true; this.vVel = this.activePowers.jmp ? 0.85 : 0.55; }
+                    else if(dy > 30) this.slide();
+                }
+            });
+            window.addEventListener('keydown', e => {
+                if(!this.active) return;
+                if(e.key === 'ArrowLeft' || e.key === 'a') this.lane = Math.max(0, this.lane - 1);
+                if(e.key === 'ArrowRight' || e.key === 'd') this.lane = Math.min(2, this.lane + 1);
+                if((e.key === 'ArrowUp' || e.key === 'w' || e.key === ' ') && !this.isJumping && !this.activePowers.jet) { this.isJumping = true; this.vVel = this.activePowers.jmp ? 0.85 : 0.55; }
+                if(e.key === 'ArrowDown' || e.key === 's') this.slide();
+            });
+        },
+
+        slide() { if(this.isSliding || this.activePowers.jet) return; this.isSliding = true; this.player.scale.y = 0.5; setTimeout(() => { this.player.scale.y = 1; this.isSliding = false; }, 750); },
+
+        spawnScenery(z) {
+            const side = Math.random() > 0.5 ? 1 : -1;
+            const isTree = Math.random() > 0.5;
+            if(isTree) {
+                const tree = new THREE.Group();
+                const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.5, 4), new THREE.MeshStandardMaterial({color: 0x8b4513})); trunk.position.y = 2; tree.add(trunk);
+                const leaves = new THREE.Mesh(new THREE.SphereGeometry(3, 8, 8), new THREE.MeshStandardMaterial({color: 0x228b22})); leaves.position.y = 5; tree.add(leaves);
+                tree.position.set(side * (12 + Math.random()*10), 0, z); this.scene.add(tree); this.buildings.push(tree);
+            } else {
+                const house = new THREE.Group();
+                const hColor = HSL(Math.random(), 0.8, 0.6);
+                const base = new THREE.Mesh(new THREE.BoxGeometry(6, 6, 6), new THREE.MeshStandardMaterial({color: hColor})); base.position.y = 3; house.add(base);
+                const roof = new THREE.Mesh(new THREE.ConeGeometry(5, 3, 4), new THREE.MeshStandardMaterial({color: 0xa52a2a})); roof.position.y = 7.5; roof.rotation.y = Math.PI/4; house.add(roof);
+                house.position.set(side * (15 + Math.random()*5), 0, z); this.scene.add(house); this.buildings.push(house);
+            }
+        },
+
+        spawn() {
+            const z = this.player.position.z - 160; const lane = Math.floor(Math.random()*3); const r = Math.random();
+            
+            for(let i=0; i<3; i++) {
+                const plank = new THREE.Mesh(new THREE.BoxGeometry(13, 0.1, 0.6), new THREE.MeshStandardMaterial({color: 0x3d2314}));
+                plank.position.set(0, 0.05, z + (i*10));
+                plank.userData = { type: 'env' }; // Identificador para entorno decorativo
+                this.scene.add(plank); this.pickables.push(plank);
+            }
+
+            if(r < 0.1) {
+                const keys = ['jet', 'mag', 'mul', 'jmp']; const p = keys[Math.floor(Math.random()*keys.length)];
+                const m = this.createPowerUpModel(p); m.position.set(this.lanesX[lane], 2, z); m.userData = { type: 'p', p };
+                this.scene.add(m); this.pickables.push(m);
+            } else if(r < 0.45) {
+                for(let i=0; i<6; i++) {
+                    const c = new THREE.Mesh(new THREE.TorusGeometry(0.5, 0.15, 8, 16), new THREE.MeshStandardMaterial({ color: 0xffd700, metalness: 0.8, roughness: 0.2 }));
+                    c.rotation.x = Math.PI/2; c.position.set(this.lanesX[lane], 1.5, z - (i*4)); c.userData = { type: 'c' }; this.scene.add(c); this.pickables.push(c);
+                }
+            } else {
+                const isTrain = Math.random() > 0.4;
+                if(isTrain) {
+                    const tColor = [0x0ea5e9, 0xf97316, 0x84cc16, 0xef4444][Math.floor(Math.random()*4)];
+                    const tMat = new THREE.MeshStandardMaterial({ color: tColor, map: this.getTex('tr_'+tColor, 'train', tColor, 0xffffff, '') });
+                    const m = new THREE.Mesh(new THREE.BoxGeometry(3.6, 3.8, 18), tMat);
+                    m.position.set(this.lanesX[lane], 1.9, z); 
+                    m.userData = { type: 'solid', height: 3.8, depth: 18 }; m.castShadow = true;
+                    this.scene.add(m); this.obstacles.push(m);
+                } else {
+                    const m = new THREE.Mesh(new THREE.BoxGeometry(3.6, 1.5, 0.5), new THREE.MeshStandardMaterial({color: 0xffaa00}));
+                    m.position.set(this.lanesX[lane], 0.75, z); m.userData = { type: 'solid', height: 1.5, depth: 0.5 }; m.castShadow = true;
+                    this.scene.add(m); this.obstacles.push(m);
+                }
+            }
+            this.spawnScenery(z);
+        },
+
+        start() {
+            document.getElementById('menu').classList.add('hidden'); document.getElementById('over').classList.add('hidden'); document.getElementById('hud').classList.remove('hidden');
+            this.createPlayerModel();
+            this.active = true; this.speed = 0.8; this.score = 0; this.coins = 0;
+            this.lane = 1; this.player.position.set(0, 0, 0); this.activePowers = {};
+            this.obstacles.forEach(o => this.scene.remove(o)); this.obstacles = [];
+            this.pickables.forEach(p => this.scene.remove(p)); this.pickables = [];
+            this.buildings.forEach(b => this.scene.remove(b)); this.buildings = [];
+            this.nextSpawn = 0;
+        },
+
+        async die() {
+            this.active = false; document.getElementById('hud').classList.add('hidden'); document.getElementById('over').classList.remove('hidden');
+            document.getElementById('final-score').innerText = Math.floor(this.score); document.getElementById('final-coins').innerText = '+' + this.coins;
+            if(db && auth.currentUser) {
+                const nC = userData.coins + this.coins, nH = Math.max(userData.highScore, Math.floor(this.score));
+                await updateDoc(doc(db, 'artifacts', appId, 'users', auth.currentUser.uid, 'saveData', 'progress'), { coins: nC, highScore: nH });
+            }
+        },
+
+        animate() {
+            requestAnimationFrame(this.animate.bind(this));
+            if(!this.active) { this.renderer.render(this.scene, this.camera); return; }
+
+            const dt = 0.016; this.speed += 0.0001; this.player.position.z -= this.speed; this.score += (this.speed * (this.activePowers.mul ? 2.5 : 1));
+
+            // Asegurar que el suelo siga infinitamente al jugador en el eje Z
+            this.envPieces.forEach(p => p.position.z = this.player.position.z);
+
+            this.camera.position.z = this.player.position.z + 18;
+            this.camera.position.x += (this.player.position.x - this.camera.position.x) * 0.15;
+            
+            let targetCamY = this.player.position.y + 10;
+            if(this.activePowers.jet) targetCamY = 22; // Elevar cámara para ver al personaje volar
+            this.camera.position.y += (targetCamY - this.camera.position.y) * 0.1;
+            this.camera.lookAt(this.player.position.x, this.player.position.y, this.player.position.z - 10);
+            
+            this.player.position.x += (this.lanesX[this.lane] - this.player.position.x) * 0.25;
+
+            // Animación de Vuelo Jetpack (Pose de Superman) o Animación Normal
+            if(this.activePowers.jet) { 
+                this.player.position.y += (15 - this.player.position.y) * 0.08; 
+                this.player.rotation.x += (-Math.PI/2 - this.player.rotation.x) * 0.1; // Cuerpo tumbado
+                
+                this.legL.rotation.x = 0; this.legR.rotation.x = 0;
+                this.armL.rotation.x = Math.PI; this.armR.rotation.x = Math.PI; // Brazos estirados al frente
+            } else {
+                this.player.rotation.x += (0 - this.player.rotation.x) * 0.1; // Volver a la postura normal
+                
+                if(!this.isJumping) {
+                    const t = Date.now() * 0.015;
+                    this.legL.rotation.x = Math.sin(t); this.legR.rotation.x = Math.sin(t + Math.PI);
+                    this.armL.rotation.x = Math.sin(t + Math.PI)*0.7; this.armR.rotation.x = Math.sin(t)*0.7;
+                } else {
+                    this.legL.rotation.x = 0; this.legR.rotation.x = 0;
+                    this.armL.rotation.x = -Math.PI/4; this.armR.rotation.x = -Math.PI/4;
+                }
+            }
+
+            // Lógica de Salto y Colisiones
+            let floorY = 0; 
+            for(let i=0; i<this.obstacles.length; i++) {
+                const o = this.obstacles[i];
+                if(Math.abs(this.player.position.x - o.position.x) < 1.0 && Math.abs(this.player.position.z - o.position.z) < (o.userData.depth/2 + 0.5)) {
+                    if(this.player.position.y >= o.userData.height - 0.5) {
+                        floorY = o.userData.height;
+                    } else {
+                        if(!this.activePowers.jet) { this.die(); return; }
+                    }
+                }
+            }
+
+            if(!this.activePowers.jet) {
+                if(this.isJumping) {
+                    this.vVel -= 0.028; 
+                    this.player.position.y += this.vVel;
+                    if(this.vVel < 0 && this.player.position.y <= floorY) { 
+                        this.player.position.y = floorY; this.isJumping = false; this.vVel = 0;
+                    }
+                } else {
+                    if(this.player.position.y > floorY + 0.1) { this.isJumping = true; this.vVel = 0; }
+                    else { this.player.position.y = floorY; } 
+                }
+            }
+
+            if(this.player.position.z < this.nextSpawn) { this.spawn(); this.nextSpawn -= 40; }
+
+            // Recolección y Limpieza de Objetos que se quedan atrás
+            const zThreshold = this.camera.position.z + 10;
+            const cleanupAndInteract = (arr, isPickable) => {
+                for(let i=arr.length-1; i>=0; i--) {
+                    const obj = arr[i];
+                    if(obj.position.z > zThreshold) {
+                        this.scene.remove(obj); arr.splice(i, 1);
+                    } else if (isPickable && (obj.userData.type === 'c' || obj.userData.type === 'p')) {
+                        obj.rotation.y += 0.05;
+                        if(this.activePowers.mag && obj.userData.type === 'c' && obj.position.distanceTo(this.player.position) < 25) {
+                            obj.position.lerp(this.player.position, 0.2);
+                        }
+                        // Detectar recogida
+                        if(Math.abs(this.player.position.x - obj.position.x) < 2.0 && Math.abs(this.player.position.z - obj.position.z) < 2.0 && Math.abs(this.player.position.y - obj.position.y) < 3.0) {
+                            if(obj.userData.type === 'c') {
+                                this.coins++;
+                            } else {
+                                this.activePowers[obj.userData.p] = POWERS[obj.userData.p].dur;
+                                // Si es un jetpack, spawneamos monedas en el cielo
+                                if(obj.userData.p === 'jet') {
+                                    for(let j=1; j<=40; j++) {
+                                        const skyCoin = new THREE.Mesh(new THREE.TorusGeometry(0.5, 0.15, 8, 16), new THREE.MeshStandardMaterial({ color: 0xffd700, metalness: 0.8, roughness: 0.2 }));
+                                        skyCoin.rotation.x = Math.PI/2; 
+                                        skyCoin.position.set(this.lanesX[this.lane], 15, this.player.position.z - (j * 12));
+                                        skyCoin.userData = { type: 'c' }; 
+                                        this.scene.add(skyCoin); this.pickables.push(skyCoin);
+                                    }
+                                }
+                            }
+                            this.scene.remove(obj); arr.splice(i, 1);
+                        }
+                    }
+                }
+            };
+            
+            cleanupAndInteract(this.obstacles, false);
+            cleanupAndInteract(this.buildings, false);
+            cleanupAndInteract(this.pickables, true);
+
+            // Actualizar Temporizadores de Poderes
+            Object.keys(this.activePowers).forEach(pow => {
+                if(this.activePowers[pow] > 0) {
+                    this.activePowers[pow] -= dt;
+                    if(this.activePowers[pow] <= 0) { delete this.activePowers[pow]; }
+                }
+            });
+            this.renderHUD();
+
+            document.getElementById('score-val').innerText = Math.floor(this.score);
+            document.getElementById('coin-val').innerText = this.coins;
+            this.renderer.render(this.scene, this.camera);
+        },
+
+        renderHUD() {
+            const h = document.getElementById('active-powers'); h.innerHTML = '';
+            Object.keys(this.activePowers).forEach(p => {
+                const data = this.activePowers[p];
+                const d = document.createElement('div'); d.className = 'glass px-4 py-1.5 flex flex-col items-end min-w-[140px] border-white/20';
+                d.innerHTML = `<span class="text-[10px] font-black tracking-widest text-white/90">${POWERS[p].icon} ${POWERS[p].name}</span><div class="w-full h-1.5 bg-white/20 rounded-full mt-1.5 overflow-hidden"><div class="power-bar" style="background:${POWERS[p].color}; width:${(data/POWERS[p].dur)*100}%"></div></div>`;
+                h.appendChild(d);
+            });
+        }
+    };
+
+    // --- UI MANAGER ---
+    window.UI = {
+        currentTab: 'chars', pendingPurchase: null,
+        setTab(t) { this.currentTab = t; this.render(); },
+        openShop(tab) { document.getElementById('menu').classList.add('hidden'); document.getElementById('shop').classList.remove('hidden'); this.setTab(tab || 'chars'); },
+        closeShop() { document.getElementById('shop').classList.add('hidden'); document.getElementById('menu').classList.remove('hidden'); },
+        openBank() { document.getElementById('bank').classList.remove('hidden'); },
+        closeBank() { document.getElementById('bank').classList.add('hidden'); },
+        
+        showNotification(msg) {
+            const noti = document.getElementById('notification'); noti.innerText = msg;
+            noti.classList.remove('hidden'); setTimeout(() => noti.classList.add('hidden'), 4000);
+        },
+        
+        openPayment(type, amount, price) {
+            this.pendingPurchase = { type, amount };
+            document.getElementById('pay-amount').innerText = '€' + price.toFixed(2);
+            document.getElementById('payment-modal').classList.remove('hidden');
+        },
+        closePayment() { document.getElementById('payment-modal').classList.add('hidden'); this.pendingPurchase = null; },
+        selectPayMethod(method) {
+            const cBtn = document.getElementById('pay-method-card'); const pBtn = document.getElementById('pay-method-paypal');
+            const cForm = document.getElementById('card-form'); const pForm = document.getElementById('paypal-form');
+            if(method === 'card') {
+                cBtn.classList.add('active-pay'); cBtn.classList.remove('text-gray-500');
+                pBtn.classList.remove('active-pay'); pBtn.classList.add('text-gray-500');
+                cForm.classList.remove('hidden'); pForm.classList.add('hidden');
+            } else {
+                pBtn.classList.add('active-pay'); pBtn.classList.remove('text-gray-500');
+                cBtn.classList.remove('active-pay'); cBtn.classList.add('text-gray-500');
+                pForm.classList.remove('hidden'); cForm.classList.add('hidden');
+            }
+        },
+        async processPayment() {
+            const btn = document.getElementById('pay-btn');
+            btn.innerText = 'Procesando...'; btn.disabled = true;
+            setTimeout(async () => {
+                if(this.pendingPurchase && db && auth.currentUser) {
+                    const type = this.pendingPurchase.type; const amount = this.pendingPurchase.amount;
+                    const newData = { [type]: userData[type] + amount };
+                    await updateDoc(doc(db, 'artifacts', appId, 'users', auth.currentUser.uid, 'saveData', 'progress'), newData);
+                    this.showNotification(`¡Pago aprobado! Se añadieron ${amount} ${type === 'cash' ? 'Billetes' : 'Monedas'}.`);
+                    this.closePayment();
+                }
+                btn.innerText = 'Pagar'; btn.disabled = false;
+            }, 1800);
+        },
+
+        render() {
+            document.querySelectorAll('.shop-tab').forEach(t => t.classList.remove('active'));
+            document.getElementById('tab-' + this.currentTab).classList.add('active');
+            const grid = document.getElementById('shop-grid'); grid.innerHTML = '';
+            const list = ITEMS[this.currentTab];
+            const catCaps = this.currentTab.charAt(0).toUpperCase() + this.currentTab.slice(1);
+            const unlockedField = 'unlocked' + catCaps; const activeField = 'current' + catCaps;
+
+            list.forEach(item => {
+                const isU = userData[unlockedField].includes(item.id), isA = userData[activeField] === item.id;
+                const div = document.createElement('div');
+                div.className = `item-card p-4 flex flex-col items-center border-2 rounded-2xl transition-all ${isA ? 'border-yellow-400 shadow-[0_0_15px_rgba(250,204,21,0.4)]' : 'border-white/10'}`;
+                const cHex = item.color !== 0 ? '#' + item.color.toString(16).padStart(6,'0') : '#ffffff';
+                const curIcon = item.currency === 'cash' ? '💵' : '🪙';
+                const curClass = item.currency === 'cash' ? 'bg-green-500' : 'bg-yellow-500';
+
+                div.innerHTML = `
+                    <span class="text-6xl mb-3 drop-shadow-xl" style="color: ${cHex}">${item.img}</span>
+                    <span class="text-[10px] font-black mb-3 text-white/90 uppercase tracking-widest text-center">${item.name}</span>
+                    <button onclick="UI.buy('${this.currentTab}', '${item.id}')" class="w-full py-3 rounded-xl font-black text-[11px] uppercase tracking-widest transition-transform active:scale-95 ${isA ? 'bg-blue-500 text-white' : (isU ? 'bg-white/20' : curClass+' text-black')}">${isA ? 'Usando' : (isU ? 'Ponerse' : curIcon+' '+item.price)}</button>
+                `;
+                grid.appendChild(div);
+            });
+            document.getElementById('shop-coins').innerText = userData.coins;
+            document.getElementById('shop-cash').innerText = userData.cash;
+        },
+        async buy(tab, id) {
+            if(!db || !auth.currentUser) return;
+            const list = ITEMS[tab]; const item = list.find(x => x.id === id);
+            const catCaps = tab.charAt(0).toUpperCase() + tab.slice(1);
+            const unlockedField = 'unlocked' + catCaps; const activeField = 'current' + catCaps;
+
+            if(userData[unlockedField].includes(id)) {
+                await updateDoc(doc(db, 'artifacts', appId, 'users', auth.currentUser.uid, 'saveData', 'progress'), { [activeField]: id });
+            } else if(userData[item.currency] >= item.price) {
+                await updateDoc(doc(db, 'artifacts', appId, 'users', auth.currentUser.uid, 'saveData', 'progress'), {
+                    [item.currency]: userData[item.currency] - item.price,
+                    [unlockedField]: [...userData[unlockedField], id],
+                    [activeField]: id
+                });
+            } else {
+                this.showNotification(`No tienes suficientes ${item.currency === 'cash' ? 'Billetes' : 'Monedas'}. ¡Ve al Banco!`);
+            }
+        }
+    };
+
+    onAuthStateChanged(auth, async u => {
+        if(!u) { await signInAnonymously(auth); return; }
+        const userDocRef = doc(db, 'artifacts', appId, 'users', u.uid, 'saveData', 'progress');
+        onSnapshot(userDocRef, (s) => {
+            if(s.exists()) {
+                userData = { ...userData, ...s.data() };
+                document.getElementById('total-coins').innerText = userData.coins;
+                document.getElementById('total-cash').innerText = userData.cash;
+                document.getElementById('best-score').innerText = 'Récord: ' + userData.highScore;
+                if(!document.getElementById('shop').classList.contains('hidden')) UI.render();
+            } else { setDoc(userDocRef, userData); }
+        });
+    });
+
+    window.onload = () => Game.init();
+</script>
+</body>
+</html>
